@@ -682,17 +682,21 @@ function distribute_addition!(grid_data, gen_costs, zone_key::AbstractString, zo
     end
 end
  
-function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, climate_year, zone_mapping;
+function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, year, climate_year, zone_mapping;
                            ns_hub_cap = nothing,
                            exclude_offshore_wind::Bool = false,
                            use_regions::Bool = false,
                            add_generator::Bool = false,
                            percentage_scale::Bool = false,
                            gen_costs = Dict(),
-                           zones_noscaling = String[])
+                           zones_noscaling = String[],
+                           keep_capacity::Bool = true)
  
     baseMVA = grid_data["baseMVA"]
     zone_key = use_regions ? "region" : "zone"
+    if tyndp_version == "2020"
+        scenario = join([scenario,year])
+    end
  
     # list zones/regions from existing generators
     zones = unique([ gen[zone_key] for (_g, gen) in grid_data["gen"] if haskey(gen, zone_key) ])
@@ -736,6 +740,7 @@ function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, c
  
         # include Generator_ID from tyndp_capacity when Node_Line == zone and Parameter == "Capacity"
         mask = (tyndp_capacity[!, :Node_Line] .== zone) .& (tyndp_capacity[!, :Parameter] .== "Capacity")
+
         if any(mask)
             for row in eachrow(tyndp_capacity[mask, :])
                 if !ismissing(row.Generator_ID) && row.Generator_ID !== nothing
@@ -782,11 +787,15 @@ function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, c
                 end
                 continue
             end
- 
-            # existing > 0: decide scale vs add shortfall depending on add_generator
+            
+            if keep_capacity == true
+                    scaling_factor = max(1.0, zonal_tyndp_capacity_mw / existing_total_mw)
+            else
+                    scaling_factor = zonal_tyndp_capacity_mw / existing_total_mw
+            end
+
             if zonal_tyndp_capacity_mw <= existing_total_mw + 1e-8
                 # scale proportionally down (or up if slightly higher)
-                scaling_factor = zonal_tyndp_capacity_mw / existing_total_mw
                 @info "Scaling $(typ) in $(zone_key)=$(zone): $(existing_total_mw) -> $(zonal_tyndp_capacity_mw) MW; factor=$(scaling_factor)"
                 for (_g, gen) in existing_gens
                     gen["pmax"] = float(gen["pmax"]) * scaling_factor
@@ -796,13 +805,12 @@ function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, c
                 add_mw = zonal_tyndp_capacity_mw - existing_total_mw
                 if add_generator
                     @info "Adding shortfall $(add_mw) MW for $(typ) in $(zone_key)=$(zone) (add_generator=true)."
-                    distribute_addition!(grid_data, gen_costs, zone_key, zone, typ, add_mw; percentage_scale=percentage_scale)
+                    distribute_addition!(grid_data, gen_costs, zone_key, zone, typ, add_mw; percentage_scale = percentage_scale)
                 else
                     # old behaviour: scale up existing to meet target
-                    scaling_factor = zonal_tyndp_capacity_mw / existing_total_mw
-                    @info "Scaling up $(typ) in $(zone_key)=$(zone) (add_generator=false): factor=$(scaling_factor)"
+                    @info "Scaling up $(typ) in $(zone_key)=$(zone): $(existing_total_mw) -> $(zonal_tyndp_capacity_mw) MW; factor=$(scaling_factor)"
                     for (_g, gen) in existing_gens
-                        gen["pmax"] = float(gen["pmax"]) * scaling_factor
+                        gen["pmax"] = float(gen["pmax"])
                     end
                 end
             end
@@ -819,6 +827,61 @@ function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, c
     end
  
     return nothing
+end
+
+
+function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zone_mapping; ns_hub_cap = nothing, exclude_offshore_wind = false, tyndp = "2020")
+    for (g, gen) in grid_data["gen"]
+        zone = gen["zone"]
+
+        # Check if generator type exists in input data
+        if haskey(gen, "type")
+            type = gen["type"]
+        else
+            print(g, "\n")
+        end
+
+        # Calculate zonal capacity: For LU there are three different zones coming from the TYNDP data
+        zonal_tyndp_capacity = 0
+        if haskey(zone_mapping, zone)
+            tyndp_zones = zone_mapping[zone]
+        else
+            tyndp_zones = Dict{String, Any}()
+        end
+        for tyndp_zone in tyndp_zones
+            # obtain 
+            zonal_capacity = get_generation_capacity(tyndp_capacity, scenario, type, climate_year, tyndp_zone, tyndp = tyndp)
+            if !isempty(zonal_capacity)
+                zonal_tyndp_capacity =  zonal_tyndp_capacity + zonal_capacity[1]
+            end
+        end
+
+        # If the zonal capacity is different than zero, scale "pmax" based on the ratios of the zonal capacities
+        if zonal_tyndp_capacity !=0
+            for (z, zone_) in grid_data["zonal_generation_capacity"]
+                if zone_["zone"] == zone
+                    scaling_factor = max(1, (zonal_tyndp_capacity / grid_data["baseMVA"] / zone_[type]) )
+                    if type == "onshore_wind"
+                        println(zone, scaling_factor)
+                    end
+                    if !exclude_offshore_wind
+                        if gen["type"] != "Offshore Wind"
+                            gen["pmax"] = gen["pmax"] * scaling_factor
+                        end
+                    else
+                        gen["pmax"] = gen["pmax"] * scaling_factor
+                    end
+                end
+            end
+        end
+
+        # Check if a different capacity should be written into the offshore wind generator NSEH
+        if !isnothing(ns_hub_cap)
+            if zone == "NSEH"
+                gen["pmax"] = ns_hub_cap
+            end
+        end
+    end 
 end
  
 """
