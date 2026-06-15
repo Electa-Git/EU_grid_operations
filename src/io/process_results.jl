@@ -126,3 +126,135 @@ function get_branch_flows(hour_start, hour_end, batch_size, file_name::String)
     return ac_branch_flows, dc_branch_flows, result
 end
 
+
+function get_branch_flows(file_name::String)
+
+
+    result = open(file_name, "r") do f
+        dicttxt = read(f, String)
+        JSON.parse(dicttxt)
+    end
+
+
+    ac_branch_flows = Dict{String, Any}([b => zeros(length(result)) for (b, branch) in result["1"]["solution"]["branch"]])
+    for hour in sort(parse.(Int, collect(keys(result))))
+         for (b, branch) in result["1"]["solution"]["branch"]
+            if haskey(result["$hour"]["solution"], "branch") && haskey(result["$hour"]["solution"]["branch"], b) 
+                ac_branch_flows[b][hour] = result["$hour"]["solution"]["branch"][b]["pf"]
+            end
+         end
+    end
+
+    if haskey(result["1"]["solution"], "branchdc")
+        dc_branch_flows = Dict{String, Any}([b => zeros(length(result)) for (b, branch) in result["1"]["solution"]["branchdc"]])
+        for hour in sort(parse.(Int, collect(keys(result))))
+             for (b, branch) in result["1"]["solution"]["branchdc"]
+                if haskey(result["$hour"]["solution"], "branchdc") && haskey(result["$hour"]["solution"]["branchdc"], b) 
+                    dc_branch_flows[b][hour] = result["$hour"]["solution"]["branchdc"][b]["pf"]
+                end
+             end
+        end
+    else
+        dc_branch_flows =  Dict{String, Any}()
+    end
+
+    return ac_branch_flows, dc_branch_flows, result
+end
+
+
+function get_branch_flows(result::Dict)
+
+    ac_branch_flows = Dict{String, Any}([b => zeros(length(result)) for (b, branch) in result[collect(keys(result))[1]]["solution"]["branch"]])
+    h_idx = 1
+    for hour in sort(parse.(Int, collect(keys(result))))
+         for (b, branch) in result[collect(keys(result))[1]]["solution"]["branch"]
+            if haskey(result["$hour"]["solution"], "branch") && haskey(result["$hour"]["solution"]["branch"], b) 
+                ac_branch_flows[b][h_idx] = result["$hour"]["solution"]["branch"][b]["pf"]
+            end
+         end
+         h_idx += 1
+    end
+
+    if haskey(result[collect(keys(result))[1]]["solution"], "branchdc")
+        dc_branch_flows = Dict{String, Any}([b => zeros(length(result)) for (b, branch) in result[collect(keys(result))[1]]["solution"]["branchdc"]])
+        h_idx = 1
+        for hour in sort(parse.(Int, collect(keys(result))))
+             for (b, branch) in result[collect(keys(result))[1]]["solution"]["branchdc"]
+                if haskey(result["$hour"]["solution"], "branchdc") && haskey(result["$hour"]["solution"]["branchdc"], b) 
+                    dc_branch_flows[b][h_idx] = result["$hour"]["solution"]["branchdc"][b]["pf"]
+                end
+             end
+             h_idx += 1
+        end
+    else
+        dc_branch_flows =  Dict{String, Any}()
+    end
+
+    return ac_branch_flows, dc_branch_flows, result
+end
+
+
+function calculate_res_generation(opf_result, input_data)
+	res_gen = 0.0
+	for (g, gen) in opf_result["solution"]["gen"]
+		if input_data["gen"][g]["type_tyndp"] == "Onshore Wind" || input_data["gen"][g]["type_tyndp"] == "Offshore WInd" || input_data["gen"][g]["type_tyndp"] == "Solar PV" || input_data["gen"][g]["type_tyndp"] == input_data["gen"][g]["type_tyndp"] == "Run-of-River" 
+			res_gen += gen["pg"] * input_data["baseMVA"]
+        end
+	end
+	return res_gen
+end
+
+function calculate_res_curtailment(opf_result, input_data)
+    res_curt = 0.0
+	for (g, gen) in opf_result["solution"]["gen"]
+		if input_data["gen"][g]["type_tyndp"] == "Onshore Wind" || input_data["gen"][g]["type_tyndp"] == "Offshore WInd" || input_data["gen"][g]["type_tyndp"] == "Solar PV" || input_data["gen"][g]["type_tyndp"] == input_data["gen"][g]["type_tyndp"] == "Run-of-River" 
+            res_curt += (input_data["gen"][g]["pmax"] - gen["pg"]) * input_data["baseMVA"]
+        end
+	end
+	return res_curt
+end
+
+function calculate_xb_generation(opf_result, opf_hvdc, input_data)
+    xb_gen = sum([gen["pg"] for (g, gen) in opf_result["solution"]["gen"] if input_data["gen"][g]["type_tyndp"] == "XB_dummy"])  * input_data["baseMVA"]      
+    xb_diff = []
+    for (g, gen) in opf_result["solution"]["gen"]
+        if input_data["gen"][g]["type_tyndp"] == "XB_dummy"
+            println(g, " ", round(gen["pg"] - opf_hvdc["solution"]["gen"][g]["pg"], digits = 3))
+            push!(xb_diff, gen["pg"] - opf_hvdc["solution"]["gen"][g]["pg"])
+        end
+    end
+	return xb_gen, xb_diff
+end
+
+function calculate_emissions(opf_result, input_data, emission_factors)
+	emissions = 0.0
+	for (g, gen) in opf_result["solution"]["gen"]
+        if haskey(input_data["gen"][g], "type") && (input_data["gen"][g]["type"] == "Gas" || input_data["gen"][g]["type"] == "XB_dummy") 
+            emission_factor = emission_factors["Gas CCGT present 2"] 
+            emissions += gen["pg"] * input_data["baseMVA"] * emission_factor
+        end
+	end
+	return emissions
+end
+
+function calculate_net_position(opf_result, input_data)
+
+	for (bo, border) in input_data["borders"]
+		println(keys(border))
+		branches = collect(keys(border["xb_lines"]))
+		convs = collect(keys(border["xb_convs"]))
+
+		if !isempty(branches)
+			flow_ac = sum([opf_result["solution"]["branch"][b]["pf"] for b in branches])
+		else 
+			flow_ac = 0.0
+		end
+		if !isempty(convs)
+			flow_dc = sum([opf_result["solution"]["convdc"][c]["pgrid"] for c in convs])
+		else
+			flow_dc = 0.0
+		end
+		println("Border: ", border["name"], " - AC flow: ", flow_ac, " - DC flow: ", flow_dc, "Zonal flow", border["flow"])
+	end
+end
+

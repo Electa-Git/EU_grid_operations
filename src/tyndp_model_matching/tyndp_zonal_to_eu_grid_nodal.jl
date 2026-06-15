@@ -10,7 +10,7 @@ function map_zones(;region_names = [])
     zone_mapping["CZ"] = ["CZ00"]
     zone_mapping["DE"] = ["DE00"]
     zone_mapping["DE-LU"] = ["LUG1"]
-    zone_mapping["DK1"] = ["DKE1", "DEKF"]
+    zone_mapping["DK1"] = ["DKE1"]
     zone_mapping["DK2"] = ["DKW1","DKKF"]
     zone_mapping["ES"] = ["ES00"]
     zone_mapping["FI"] = ["FI00"]
@@ -33,7 +33,7 @@ function map_zones(;region_names = [])
     zone_mapping["NO3"] = ["NOM1"]
     zone_mapping["NO4"] = ["NON1"]
     zone_mapping["NO5"] = ["NOM1"] # NO5 not in tyndp model
-    zone_mapping["PL"] =  ["PL00"]
+    zone_mapping["PL"] =  ["PL00", "PL00I", "PL00E", "PLE0","PLI0"]
     zone_mapping["PT"] =  ["PT00"]
     zone_mapping["RO"] = ["RO00"]
     zone_mapping["RS"] = ["RS00"]
@@ -149,7 +149,7 @@ function create_res_and_demand_time_series(wind_onshore, wind_offshore, pv, scen
 end
 
 
-function hourly_grid_data!(grid_data, grid_data_orig, hour, timeseries_data)
+function hourly_grid_data!(grid_data, grid_data_orig, hour, timeseries_data; start_hour = 0)
     for (l, load) in grid_data["load"]
         if haskey(load, "country_name")
             zone = load["country_name"]
@@ -186,12 +186,18 @@ function hourly_grid_data!(grid_data, grid_data_orig, hour, timeseries_data)
             gen["pmax"] =  timeseries_data["run_of_river"][zone][hour] * grid_data_orig["gen"][g]["pmax"]
         end
     end
+    h_idx = hour - start_hour + 1
     for (b, border) in grid_data["borders"]
-        flow = timeseries_data["xb_flows"][border["name"]]["flow"][1, hour]
+        flow = timeseries_data["xb_flows"][border["name"]]["flow"][1, h_idx]
         if abs(flow) > border["border_cap"]
             border["flow"] = sign(flow) * border["border_cap"] * 0.95  # to avoid numerical infeasibility & compensate for possible HVDC losses
         else
             border["flow"] = flow
+        end
+        for (g, gen) in grid_data["gen"]
+            if gen["zone"] == border["name"] 
+                gen["cost"][1] = 0 * -sign(flow)
+            end
         end
     end
     return grid_data
@@ -409,22 +415,27 @@ function get_xb_flows(zone_grid, zonal_result, zonal_input, zone_mapping)
     for (b, border) in zone_grid["borders"]
         borders[border["name"]] = Dict{String, Any}("flow" => zeros(1, length(zonal_result)))
         if haskey(zone_mapping, border["name"])
-            tyndp_zone_fr = zone_mapping[zone][1]
-            tyndp_zone_to = zone_mapping[border["name"]][1]
-        
-            int_name_fr = join([tyndp_zone_fr,"-",tyndp_zone_to])
-            int_name_to = join([tyndp_zone_to,"-",tyndp_zone_fr])
-            flow = 0
-            for (r, res) in zonal_result
-                for (b, branch) in zonal_input["branch"]
-                    if branch["name"] == int_name_fr
-                        flow = res["solution"]["branch"][b]["pf"]
-                    elseif branch["name"] == int_name_to
-                        flow = res["solution"]["branch"][b]["pt"]
+            for idx in 1:length(zone_mapping[border["name"]])
+                tyndp_zone_fr = zone_mapping[zone][1]
+                tyndp_zone_to = zone_mapping[border["name"]][idx]
+                int_name_fr = join([tyndp_zone_fr,"-",tyndp_zone_to])
+                int_name_to = join([tyndp_zone_to,"-",tyndp_zone_fr])
+                flow = 0
+                r_idx = 1
+                hours = sort(parse.(Int,collect(keys(zonal_result))))
+                for h in hours
+                    res = zonal_result["$h"]
+                    for (b, branch) in zonal_input["branch"]
+                        if branch["name"] == int_name_fr
+                            flow = res["solution"]["branch"][b]["pf"]
+                        elseif branch["name"] == int_name_to
+                            flow = res["solution"]["branch"][b]["pt"]
+                        end
                     end
-                end
-                borders[border["name"]]["flow"][1, parse(Int, r)] = flow
-            end   
+                    borders[border["name"]]["flow"][1, r_idx] = borders[border["name"]]["flow"][1, r_idx] + flow
+                    r_idx = r_idx + 1
+                end   
+            end
         end
      end
      return borders
@@ -453,9 +464,16 @@ function fix_data!(grid_data)
         b_b = imag(1 / (branch["br_r"] + branch["br_x"]im))
         theta_max = branch["rate_a"] / b_b
         if theta_max > pi || theta_max < -pi
-            print("Updating rate_a of branch ", b, " due to high reactance.", "\n")
+            print("Updating reactance of of branch ", b, " due to high reactance.", "\n")
             branch["rate_a"] = abs(pi * b_b)
         end
+
+        # if theta_max > pi || theta_max < -pi
+        #     print("Updating reactance of of branch ", b, " due to unrealistic value.", "\n")
+        #     new_b = branch["rate_a"] / abs(theta_max)
+        #     branch["br_x"] = (1 / new_b) * 0.9 # assume R/X ratio of 1/10
+        #     branch["br_r"] = (1 / new_b) * 0.1 
+        # end
     end
 
     return grid_data
@@ -810,7 +828,7 @@ function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, y
                     # old behaviour: scale up existing to meet target
                     @info "Scaling up $(typ) in $(zone_key)=$(zone): $(existing_total_mw) -> $(zonal_tyndp_capacity_mw) MW; factor=$(scaling_factor)"
                     for (_g, gen) in existing_gens
-                        gen["pmax"] = float(gen["pmax"])
+                        gen["pmax"] = float(gen["pmax"]) * scaling_factor
                     end
                 end
             end
@@ -826,7 +844,7 @@ function scale_generation!(tyndp_capacity, grid_data, tyndp_version, scenario, y
         end
     end
  
-    return nothing
+    return
 end
 
 
@@ -835,8 +853,8 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
         zone = gen["zone"]
 
         # Check if generator type exists in input data
-        if haskey(gen, "type")
-            type = gen["type"]
+        if haskey(gen, "type_tyndp")
+            type = gen["type_tyndp"]
         else
             print(g, "\n")
         end
@@ -855,6 +873,7 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
                 zonal_tyndp_capacity =  zonal_tyndp_capacity + zonal_capacity[1]
             end
         end
+
 
         # If the zonal capacity is different than zero, scale "pmax" based on the ratios of the zonal capacities
         if zonal_tyndp_capacity !=0

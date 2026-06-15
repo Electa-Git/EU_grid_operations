@@ -515,7 +515,7 @@ function create_european_grid(;output_filename::String = "./data_sources/Europea
             European_grid["zonal_generation_capacity"]["$idx"]["PHS capacity"] =  xf["HYDRO_OVERVIEW"]["F3:F44"][idx]/European_grid["baseMVA"]
             # Thermal -> This may need to be updated, no nuclear in BE instead of 5.943 GW ...
             European_grid["zonal_generation_capacity"]["$idx"]["Other RES"] =  xf["THERMAL_OVERVIEW"]["B2:B43"][idx]/European_grid["baseMVA"]
-            European_grid["zonal_generation_capacity"]["$idx"]["Gas CCGT new"] =  xf["THERMAL_OVERVIEW"]["C2:C43"][idx]/European_grid["baseMVA"]
+            European_grid["zonal_generation_capacity"]["$idx"]["Gas CCGT existing 2"] =  xf["THERMAL_OVERVIEW"]["C2:C43"][idx]/European_grid["baseMVA"]
             European_grid["zonal_generation_capacity"]["$idx"]["Hard coal old 2 Bio"] =  xf["THERMAL_OVERVIEW"]["D2:D43"][idx]/European_grid["baseMVA"]
             European_grid["zonal_generation_capacity"]["$idx"]["Lignite old 1"] =  xf["THERMAL_OVERVIEW"]["E2:E43"][idx]/European_grid["baseMVA"]
             European_grid["zonal_generation_capacity"]["$idx"]["Nuclear"] =  xf["THERMAL_OVERVIEW"]["F2:F43"][idx]/European_grid["baseMVA"]

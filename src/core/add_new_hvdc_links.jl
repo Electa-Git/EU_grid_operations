@@ -28,6 +28,7 @@ function add_hvdc_links(grid_data, links)
         elseif key == "Suedlink"
             # Brunsbuettel: 53.9160355330674, 9.235429411946734
             # Grossgartach: 49.1424721420109, 9.149063227242355
+            power_rating = 40.0
             grid_data_inv, dc_bus_idx_bb = add_dc_bus!(grid_data_inv, dc_voltage; lat = 53.9160355330674, lon = 9.235429411946734)
             ac_bus_idx = find_closest_bus(grid_data_inv, 53.9160355330674, 9.235429411946734)
             add_converter!(grid_data_inv, ac_bus_idx, dc_bus_idx_bb, power_rating)

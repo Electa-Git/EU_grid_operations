@@ -12,20 +12,21 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
         push!(type,0)
     end
     
-    
-    for (c, conv) in data["convdc"]
-        bus_ac = conv["busac_i"]
-        bus_dc = conv["busdc_i"]
-    
-        data["busdc"]["$bus_dc"]["lat"] = data["bus"]["$bus_ac"]["lat"]
-        data["busdc"]["$bus_dc"]["lon"] = data["bus"]["$bus_ac"]["lon"]
-    end
-     
-    for (b_id,b) in data["busdc"]
-        push!(nodes, b["index"])
-        push!(lat, b["lat"])
-        push!(lon, b["lon"])
-        push!(type, 1)
+    if ac_only == false
+        for (c, conv) in data["convdc"]
+            bus_ac = conv["busac_i"]
+            bus_dc = conv["busdc_i"]
+        
+            data["busdc"]["$bus_dc"]["lat"] = data["bus"]["$bus_ac"]["lat"]
+            data["busdc"]["$bus_dc"]["lon"] = data["bus"]["$bus_ac"]["lon"]
+        end
+        
+        for (b_id,b) in data["busdc"]
+            push!(nodes, b["index"])
+            push!(lat, b["lat"])
+            push!(lon, b["lon"])
+            push!(type, 1)
+        end
     end
      
     # Creating a series of vectors to be added to a DataFrame dictionary
@@ -57,18 +58,20 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
             push!(type_,0)
         end
     end
-    for (b, branch) in data["branchdc"]
-        bus_fr = branch["fbusdc"]
-        bus_to = branch["tbusdc"]
-        if haskey(data["busdc"], "$bus_fr") && haskey(data["busdc"], "$bus_to")
-            push!(bus_fr_,branch["fbusdc"])
-            push!(bus_to_,branch["tbusdc"])
-            push!(branches, branch["index"])
-            push!(lat_fr,data["busdc"]["$bus_fr"]["lat"])
-            push!(lon_fr,data["busdc"]["$bus_fr"]["lon"])
-            push!(lat_to,data["busdc"]["$bus_to"]["lat"])
-            push!(lon_to,data["busdc"]["$bus_to"]["lon"])
-        push!(type_,1)
+    if ac_only == false
+        for (b, branch) in data["branchdc"]
+            bus_fr = branch["fbusdc"]
+            bus_to = branch["tbusdc"]
+            if haskey(data["busdc"], "$bus_fr") && haskey(data["busdc"], "$bus_to")
+                push!(bus_fr_,branch["fbusdc"])
+                push!(bus_to_,branch["tbusdc"])
+                push!(branches, branch["index"])
+                push!(lat_fr,data["busdc"]["$bus_fr"]["lat"])
+                push!(lon_fr,data["busdc"]["$bus_fr"]["lon"])
+                push!(lat_to,data["busdc"]["$bus_to"]["lat"])
+                push!(lon_to,data["busdc"]["$bus_to"]["lon"])
+            push!(type_,1)
+            end
         end
     end
      
@@ -79,10 +82,12 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
     ac_buses=filter(:type => ==(0), dict_nodes)       
     markerAC = PlotlyJS.attr(size=[txt_x],
                 color="green")
-     
-    dc_buses=filter(:type => ==(1), dict_nodes)       
-    markerDC = PlotlyJS.attr(size=[txt_x],
-                color="blue")
+    
+    if ac_only == false
+        dc_buses=filter(:type => ==(1), dict_nodes)       
+        markerDC = PlotlyJS.attr(size=[txt_x],
+                    color="blue")
+    end
                 
     if plot_node_numbers_ac == true            
         #AC buses legend
@@ -98,22 +103,26 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
                     marker=markerAC)  for row in eachrow(ac_buses)]
         
     end
-    if plot_node_numbers_dc == true 
+    if ac_only == false
+        if  plot_node_numbers_dc == true 
+                    #DC buses legend
+                    traceDC = [PlotlyJS.scattergeo(;mode="markers+text",textfont=PlotlyJS.attr(size=txt_x),
+                    textposition="top center",text=string(row[:node][1]),
+                                lat=[row[:lat]],lon=[row[:lon]],
+                            marker=markerDC)  for row in eachrow(dc_buses)]
+        else
                 #DC buses legend
-                traceDC = [PlotlyJS.scattergeo(;mode="markers+text",textfont=PlotlyJS.attr(size=txt_x),
-                textposition="top center",text=string(row[:node][1]),
-                            lat=[row[:lat]],lon=[row[:lon]],
-                        marker=markerDC)  for row in eachrow(dc_buses)]
-    else
-            #DC buses legend
-            traceDC = [PlotlyJS.scattergeo(;mode="markers",
-            lat=[row[:lat]],lon=[row[:lon]],
-            marker=markerDC)  for row in eachrow(dc_buses)]
+                traceDC = [PlotlyJS.scattergeo(;mode="markers",
+                lat=[row[:lat]],lon=[row[:lon]],
+                marker=markerDC)  for row in eachrow(dc_buses)]
+        end
     end
     
     if color_branches == false
         #DC line display
-        lineDC = PlotlyJS.attr(width=1*txt_x,color="red")
+        if ac_only == false
+            lineDC = PlotlyJS.attr(width=1*txt_x,color="red")
+        end
         
         #AC line display
         lineAC = PlotlyJS.attr(width=1*txt_x,color="navy")#,dash="dash")
@@ -124,16 +133,20 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
         lon=[row.lon_fr,row.lon_to],
         line = lineAC)
         for row in eachrow(map_) if (row[:type]==0)]
-
-        trace_DC=[PlotlyJS.scattergeo(;mode="lines",
-        lat=[row.lat_fr,row.lat_to],
-        lon=[row.lon_fr,row.lon_to],
-        #opacity = row.overload,
-        line = lineDC)
-        for row in eachrow(map_) if (row[:type]==1)]
+        
+        if ac_only == false
+            trace_DC=[PlotlyJS.scattergeo(;mode="lines",
+            lat=[row.lat_fr,row.lat_to],
+            lon=[row.lon_fr,row.lon_to],
+            #opacity = row.overload,
+            line = lineDC)
+            for row in eachrow(map_) if (row[:type]==1)]
+        end
     else
         trace_AC = [PlotlyJS.scattergeo()]
+        if ac_only == false
         trace_DC = [PlotlyJS.scattergeo()]
+        end
         #AC line legend
         for row in eachrow(map_)
             if row[:type] == 0
@@ -151,11 +164,13 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
                 if maximum_flows == true
                     flow =  maximum(flows_dc["$branch"])
                 else
-                    flow =  sum(flows_dc["$branch"]) / length(flows_dc["$branch"])
-                end
+                    if ac_only == false
+                        flow =  sum(flows_dc["$branch"]) / length(flows_dc["$branch"])
+                    end
                 color = Int(round(max(1, flow * 100)))
                 lineDC = PlotlyJS.attr(width = 2 * txt_x, color =  ColorSchemes.get(ColorSchemes.jet, flow))
                 push!(trace_DC, PlotlyJS.scattergeo(;mode="lines", lat=[row.lat_fr,row.lat_to], lon=[row.lon_fr,row.lon_to], line = lineDC))
+                end
             end
         end
     end
@@ -173,9 +188,10 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
     layout = PlotlyJS.Layout(geo = geo, geo_resolution = 50, width = 1000, height = 1100,
     showlegend = false,
     margin=PlotlyJS.attr(l=0, r=0, t=0, b=0))
-    PlotlyJS.plot(trace, layout) # print figure
+    p = PlotlyJS.plot(trace, layout) # print figure
     PlotlyJS.savefig(PlotlyJS.plot(trace, layout), file_name)
     
+    return p
 end
 
 
@@ -256,4 +272,6 @@ function plot_average_zonal_costs(result, input_data, file_name; zones = nothing
     Plots.xlabel!("Hour of the year")
     Plots.ylabel!("Average cost of generation € / MWh")
     Plots.savefig(p, file_name)
+
+    return p
 end

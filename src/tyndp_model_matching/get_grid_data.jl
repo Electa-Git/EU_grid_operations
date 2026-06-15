@@ -27,19 +27,20 @@ function get_grid_data_2020(scenario, year, climate_year)
     file_demand = joinpath(BASE_DIR,"data_sources", "TYNDP2020", join([scenario,year,"_Demand_CY1984.csv"]))
 
     # Create dataframes from CSV/XLS files
-    lines = XLSX.readtable(file_lines, "2025")
-    ntcs = _DF.DataFrame(Connection = lines[1][1], NTC = lines[1][2])
+    lines = _DF.DataFrame(XLSX.readtable(file_lines, "2025"))
+    ntcs = _DF.DataFrame(Connection = lines[!, "Border Names Based on PEMMDB 3.0 convention"], NTC = lines[!, "Final Value for NTC (MW)"])
 
-    nodes_ = XLSX.readtable(file_data, "Nodes - Dict")
-    nodes = _DF.DataFrame(node_id = nodes_[1][1][1:64], country_text = nodes_[1][2][1:64], country = nodes_[1][3][1:64], previous_node = nodes_[1][4][1:64], latitude = nodes_[1][5][1:64], longitude = nodes_[1][6][1:64], region = nodes_[1][7][1:64], EU28 = nodes_[1][8][1:64])
+    nodes_ = _DF.DataFrame(XLSX.readtable(file_data, "Nodes - Dict"))
+    nodes = _DF.DataFrame(node_id = nodes_[1:64, "node_id"], country_text = nodes_[1:64, "Unnamed: 1"], country = nodes_[1:64, "country"], previous_node = nodes_[1:64, "previous_node"], latitude = nodes_[1:64, "latitude"], longitude = nodes_[1:64, "longitude"], region = nodes_[1:64, "Region"], EU28 = nodes_[1:64, "EU28"])
 
-    arcs_ = XLSX.readtable(file_data,"Line - Dict")
-    arcs = _DF.DataFrame(line_id = arcs_[1][1], node_a = arcs_[1][2], node_b = arcs_[1][3])
+    arcs_ = _DF.DataFrame(XLSX.readtable(file_data,"Line - Dict"))
+    arcs = _DF.DataFrame(line_id = arcs_[!, "line_id"], node_a = arcs_[!, "node_a"], node_b = arcs_[!, "node_b"])
 
-    capacity_ = XLSX.readtable(file_data, "Capacity")
-    capacity = _DF.DataFrame(Node_Line = capacity_[1][1], Generator_ID = capacity_[1][2], Parameter = capacity_[1][3], Category = capacity_[1][4], Case = capacity_[1][5], Scenario = capacity_[1][6], 
-    Year = capacity_[1][7], ClimateYear = capacity_[1][8], Value = capacity_[1][9], Simulation_ID = capacity_[1][10], Node1 = capacity_[1][11], 
-    Path = capacity_[1][12], Simulation_type = capacity_[1][13] , Sector = capacity_[1][14], Note = capacity_[1][15])
+    capacity_ = _DF.DataFrame(XLSX.readtable(file_data, "Capacity"))
+    capacity = _DF.DataFrame(Node_Line = capacity_[!, "Node/Line"], Generator_ID = capacity_[!, "Generator_ID"], Parameter = capacity_[!, "Parameter"], Category = capacity_[!, "Category"], 
+    Case = capacity_[!, "Case"], Scenario = capacity_[!, "Scenario"], Year = capacity_[!, "Year"], ClimateYear = capacity_[!, "Climate Year"], 
+    Value = capacity_[!, "Value"], Simulation_ID = capacity_[!, "Simulation_ID"], Node1 = capacity_[!, "Node 1"], 
+    Path = capacity_[!, "Path"], Simulation_type = capacity_[!, "Simulation_type"], Sector = capacity_[!, "Sector"], Note = capacity_[!, "Note"])
 
     node_positions = nodes[:, [:latitude, :longitude]]
 
@@ -310,37 +311,42 @@ end
 
 function get_grid_data_2024(scenario, year, climate_year)    
     # data source: https://2024.entsos-tyndp-scenarios.eu/download/#:~:text=Electricity%20and%20Hydrogen%20Reference%20Grid%20%26%20Investment%20Candidates%20After%20Public%20Consultation    
-    file_lines = joinpath(BASE_DIR,"data_sources", "TYNDP2024", "20231103 - Electricity and Hydrogen Reference Grid & Investment Candidates 3_modified.xlsx")
+    file_lines = joinpath(pkgdir(EU_grid_operations),"data_sources", "TYNDP2024", "20231103 - Electricity and Hydrogen Reference Grid & Investment Candidates 3_modified.xlsx")
     # data source: https://2020.entsos-tyndp-scenarios.eu/wp-content/uploads/2020/06/TYNDP-2020-Scenario-Datafile.xlsx.zip
-    file_nodes = joinpath(BASE_DIR,"data_sources", "TYNDP2024","LIST OF NODES_2024.xlsx")
+    file_nodes = joinpath(pkgdir(EU_grid_operations),"data_sources", "TYNDP2024","LIST OF NODES_2024.xlsx")
     # data source for all demand time series: https://tyndp.entsoe.eu/maps-data 
-    file_demand = joinpath(BASE_DIR,"data_sources", "TYNDP2024","Demand_Profiles","$(scenario)", "$(year)","Total_demand_$(scenario)$(year)_$(climate_year).csv")
-    file_capacity = joinpath(BASE_DIR,"data_sources", "TYNDP2024","PEMMDB2","$(scenario)", "$(year)","Installed_generation_capacity_$(scenario)$(year)_MW.csv")
+    file_demand = joinpath(pkgdir(EU_grid_operations),"data_sources", "TYNDP2024","Demand_Profiles","$(scenario)", "$(year)","Total_demand_$(scenario)$(year)_$(climate_year).csv")
+    file_capacity = joinpath(pkgdir(EU_grid_operations),"data_sources", "TYNDP2024","PEMMDB2","$(scenario)", "$(year)","Installed_generation_capacity_$(scenario)$(year)_MW.csv")
 
     # Create dataframes from CSV/XLS files
-    lines = XLSX.readtable(file_lines, "1. Elec Ref Grid")
+    lines = _DF.DataFrame(XLSX.readtable(file_lines, "1. Elec Ref Grid"))
     lines_complete = []
     ntcs = []
     node_a_ = []
     node_b_ = []
-    for i in 1:length(lines[1][4]) # direction a -> b
-        push!(lines_complete, "$(lines[1][4][i])-$(lines[1][5][i])")
-        push!(ntcs, lines[1][2][i]) # direction a -> b
-        push!(node_a_,lines[1][4][i])
-        push!(node_b_,lines[1][5][i])
-    end
-    for i in 1:length(lines[1][4]) # direction b -> a
-        push!(lines_complete, "$(lines[1][5][i])-$(lines[1][4][i])")
-        push!(ntcs, lines[1][3][i]) # direction b -> a
-        push!(node_a_,lines[1][5][i])
-        push!(node_b_,lines[1][4][i])
-    end
+    # for i in 1:length(lines[1][4]) # direction a -> b
+    #     push!(lines_complete, "$(lines[1][4][i])-$(lines[1][5][i])")
+    #     push!(ntcs, lines[1][2][i]) # direction a -> b
+    #     push!(node_a_,lines[1][4][i])
+    #     push!(node_b_,lines[1][5][i])
+    # end
+    # for i in 1:length(lines[1][4]) # direction b -> a
+    #     push!(lines_complete, "$(lines[1][5][i])-$(lines[1][4][i])")
+    #     push!(ntcs, lines[1][3][i]) # direction b -> a
+    #     push!(node_a_,lines[1][5][i])
+    #     push!(node_b_,lines[1][4][i])
+    # end
+    lines_complete = lines[!, :Border]
+    ntcs = lines[!, "Summary Direction 1 (MW)"]
+    nodes_a_ = lines[!, "node_a"]
+    nodes_b_ = lines[!, "node_b"]
     ntcs = _DF.DataFrame(Connection = lines_complete, NTC = ntcs)
     
-    nodes_ = XLSX.readtable(file_nodes, "Electricity")
-    nodes = _DF.DataFrame(node_id = nodes_[1][1][1:82], country_text = nodes_[1][2][1:82], country = nodes_[1][3][1:82], previous_node = nodes_[1][4][1:82], latitude = nodes_[1][5][1:82], longitude = nodes_[1][6][1:82], region = nodes_[1][7][1:82], EU28 = nodes_[1][8][1:82])
+    nodes_ = _DF.DataFrame(XLSX.readtable(file_nodes, "Electricity"))
+    nodes = _DF.DataFrame(node_id = nodes_[!,:NODE], country_text = nodes_[!,"Unnamed: 1"], country = nodes_[!,:country], previous_node = nodes_[!,:previous_node], latitude = nodes_[!,:latitude], longitude = nodes_[!,:longitude], region = nodes_[!,:Region], EU28 = nodes_[!,:EU28])
+    #, country_text = nodes_[1][2][1:82], country = nodes_[1][3][1:82], previous_node = nodes_[1][4][1:82], latitude = nodes_[1][5][1:82], longitude = nodes_[1][6][1:82], region = nodes_[1][7][1:82], EU28 = nodes_[1][8][1:82])
     
-    arcs = _DF.DataFrame(line_id = lines_complete, node_a = node_a_, node_b = node_b_)
+    arcs = _DF.DataFrame(line_id = lines_complete, node_a = nodes_a_, node_b = nodes_b_)
 
     # Gen capacity installed
     capacity_ = _DF.DataFrame(CSV.File(file_capacity))
@@ -421,11 +427,11 @@ function get_grid_data_2024(scenario, year, climate_year)
         "Solar PV"  => 41,
         "Solar Thermal"  => 108,
         "Gas CCGT new" => 89,
-        "Gas CCGT CCS" => 89,
-        "Gas CCGT old 1"  => 89,
-        "Gas CCGT old 2"  => 89,
-        "Gas CCGT present 1"  => 89,
-        "Gas CCGT present 2"  => 89,
+        "Gas CCGT CCS" => 90,
+        "Gas CCGT old 1"  => 90,
+        "Gas CCGT old 2"  => 90,
+        "Gas CCGT present 1"  => 90,
+        "Gas CCGT present 2"  => 90,
         "Reservoir"  => 53,
         "Run-of-River"  => 53,
         "Gas Conventional old 1"  => 120,
@@ -448,7 +454,7 @@ function get_grid_data_2024(scenario, year, climate_year)
         "Heavy oil old 1 Bio"  => 120,
         "Lignite old 1 Bio"  => 120,
         "Oil shale new Bio"  => 120,
-        "Gas OCGT new"  => 89,
+        "Gas OCGT new"  => 92,
         "Gas OCGT old"  => 120,
         "Heavy oil old 1"  => 150,
         "Heavy oil old 2"  => 120,
@@ -608,7 +614,7 @@ function get_grid_data_2024(scenario, year, climate_year)
         "Onshore Wind"  => 0,
         "Solar PV"  => 0,
         "Solar Thermal"  => 0,
-        "Gas CCGT new"        => 90,
+        "Gas CCGT new"        => 89,
         "Gas CCGT CCS"        => 90,
         "Gas CCGT old 1"      => 90,
         "Gas CCGT old 2"      => 90,

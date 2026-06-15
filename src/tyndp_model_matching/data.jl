@@ -284,7 +284,7 @@ function add_gen!(data, g_idx, g, gen_costs, emission_factor, inertia_constants,
         end
         data["gen"]["$g_idx"]["cost"] = [0.0, 1.0, 0] .* gen_cost .* data["baseMVA"]
         data["gen"]["$g_idx"]["type"] = g
-        data["gen"]["$g_idx"]["emissions"] = emission_factor[g]
+        data["gen"]["$g_idx"]["emission_factor"] = emission_factor[g]
         data["gen"]["$g_idx"]["inertia_constants"] = inertia_constants[g]
     end
 

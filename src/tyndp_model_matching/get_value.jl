@@ -54,6 +54,10 @@ function get_generation_capacity_2024(capacity, type, node)
     else
         value =  nodal_gen_type[!, "Value"][1]
     end
+    if node == "DE00" && type == "Offshore Wind"
+       nodal_gen = capacity[capacity[!, "Node_Line"] .== "DEKF", :]
+       value =  nodal_gen[1, "Value"]
+    end
     return value
 end
 # Extract hourly RES capacity factors from RES time series
