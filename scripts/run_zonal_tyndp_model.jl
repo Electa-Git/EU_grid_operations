@@ -68,7 +68,7 @@ input_data, nodal_data = _EUGO.construct_data_dictionary(tyndp_version, ntcs, ar
 
 # Make copy of input data dictionary as RES and demand data updated for each hour
 input_data_raw = deepcopy(input_data)
-
+_PM.solve_opf(input_data, PowerModels.NFAPowerModel, solver) 
 
 print("######################################", "\n")
 print("### STARTING HOURLY OPTIMISATION ####", "\n")

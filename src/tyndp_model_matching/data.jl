@@ -196,22 +196,42 @@ function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, sce
     return data, nodal_data
 end
     
-function prepare_hourly_data!(data, nodal_data, hour)    
-    for (l, load) in data["load"]
-        node = load["node"]
-        load["pd"] = nodal_data[node]["demand"][hour] / data["baseMVA"]
-    end
+function prepare_hourly_data!(data, nodal_data, hour)
+    if haskey(data, "nw")
+        for (l, load) in data["nw"]["$hour"]["load"]
+            node = load["node"]
+            load["pd"] = nodal_data[node]["demand"][hour] / data["nw"]["1"]["baseMVA"]
+        end
 
-    for (g, gen) in data["gen"]
-        node = gen["node"]
-        if gen["type"] == "Solar PV"
-            gen["pmax"] = nodal_data[node]["generation"]["Solar PV"]["timeseries"][hour] / data["baseMVA"]
-        elseif gen["type"] == "Onshore Wind"
-            gen["pmax"] = nodal_data[node]["generation"]["Onshore Wind"]["timeseries"][hour] / data["baseMVA"]
-        elseif gen["type"] == "Offshore Wind"
-            gen["pmax"] = nodal_data[node]["generation"]["Offshore Wind"]["timeseries"][hour] / data["baseMVA"]
-        elseif gen["type"] == "ENS"
-            gen["pmax"] = nodal_data[node]["demand"][hour] / data["baseMVA"]
+        for (g, gen) in data["nw"]["$hour"]["gen"]
+            node = gen["node"]
+            if gen["type"] == "Solar PV"
+                gen["pmax"] = nodal_data[node]["generation"]["Solar PV"]["timeseries"][hour] / data["nw"]["1"]["baseMVA"]
+            elseif gen["type"] == "Onshore Wind"
+                gen["pmax"] = nodal_data[node]["generation"]["Onshore Wind"]["timeseries"][hour] / data["nw"]["1"]["baseMVA"]
+            elseif gen["type"] == "Offshore Wind"
+                gen["pmax"] = nodal_data[node]["generation"]["Offshore Wind"]["timeseries"][hour] / data["nw"]["1"]["baseMVA"]
+            elseif gen["type"] == "ENS"
+                gen["pmax"] = nodal_data[node]["demand"][hour] / data["nw"]["1"]["baseMVA"]
+            end
+        end
+    else    
+        for (l, load) in data["load"]
+            node = load["node"]
+            load["pd"] = nodal_data[node]["demand"][hour] / data["baseMVA"]
+        end
+
+        for (g, gen) in data["gen"]
+            node = gen["node"]
+            if gen["type"] == "Solar PV"
+                gen["pmax"] = nodal_data[node]["generation"]["Solar PV"]["timeseries"][hour] / data["baseMVA"]
+            elseif gen["type"] == "Onshore Wind"
+                gen["pmax"] = nodal_data[node]["generation"]["Onshore Wind"]["timeseries"][hour] / data["baseMVA"]
+            elseif gen["type"] == "Offshore Wind"
+                gen["pmax"] = nodal_data[node]["generation"]["Offshore Wind"]["timeseries"][hour] / data["baseMVA"]
+            elseif gen["type"] == "ENS"
+                gen["pmax"] = nodal_data[node]["demand"][hour] / data["baseMVA"]
+            end
         end
     end
 
@@ -226,6 +246,10 @@ function prepare_mn_data(data, nodal_data, hours)
         for (l, load) in mn_data["nw"]["$h_idx"]["load"]
             node = load["node"]
             load["pd"] = nodal_data[node]["demand"][hour] / data["baseMVA"]
+            load["pred_rel_max"] = 0.0
+            load["cost_red"] = 1000.0 * data["baseMVA"]
+            load["cost_curt"] = 10000.0 * data["baseMVA"]
+            load["flex"] = 1
         end
 
         for (g, gen) in mn_data["nw"]["$h_idx"]["gen"]
@@ -271,7 +295,9 @@ function add_gen!(data, g_idx, g, gen_costs, emission_factor, inertia_constants,
         data["gen"]["$g_idx"]["type"] = "ENS"
     else
         if !isempty(nodal_data[node_id]["generation"][g]["capacity"])
-            data["gen"]["$g_idx"]["pmax"] = nodal_data[node_id]["generation"][g]["capacity"][1] / data["baseMVA"]
+            data["gen"]["$g_idx"]["pmax"] =  nodal_data[node_id]["generation"][g]["capacity"][1] / data["baseMVA"]
+            data["gen"]["$g_idx"]["qmax"] =  nodal_data[node_id]["generation"][g]["capacity"][1] / data["baseMVA"]
+            data["gen"]["$g_idx"]["qmin"] = -nodal_data[node_id]["generation"][g]["capacity"][1] / data["baseMVA"]
             data["gen"]["$g_idx"]["gen_status"] = 1
         else
             data["gen"]["$g_idx"]["pmax"] = 0
