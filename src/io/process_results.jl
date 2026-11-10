@@ -197,7 +197,7 @@ end
 function calculate_res_generation(opf_result, input_data)
 	res_gen = 0.0
 	for (g, gen) in opf_result["solution"]["gen"]
-		if input_data["gen"][g]["type_tyndp"] == "Onshore Wind" || input_data["gen"][g]["type_tyndp"] == "Offshore WInd" || input_data["gen"][g]["type_tyndp"] == "Solar PV" || input_data["gen"][g]["type_tyndp"] == input_data["gen"][g]["type_tyndp"] == "Run-of-River" 
+		if input_data["gen"][g]["type_tyndp"] == "Onshore Wind" || input_data["gen"][g]["type_tyndp"] == "Offshore Wind" || input_data["gen"][g]["type_tyndp"] == "Solar PV" || input_data["gen"][g]["type_tyndp"] == input_data["gen"][g]["type_tyndp"] == "Run-of-River" 
 			res_gen += gen["pg"] * input_data["baseMVA"]
         end
 	end
@@ -207,7 +207,7 @@ end
 function calculate_res_curtailment(opf_result, input_data)
     res_curt = 0.0
 	for (g, gen) in opf_result["solution"]["gen"]
-		if input_data["gen"][g]["type_tyndp"] == "Onshore Wind" || input_data["gen"][g]["type_tyndp"] == "Offshore WInd" || input_data["gen"][g]["type_tyndp"] == "Solar PV" || input_data["gen"][g]["type_tyndp"] == input_data["gen"][g]["type_tyndp"] == "Run-of-River" 
+		if input_data["gen"][g]["type_tyndp"] == "Onshore Wind" || input_data["gen"][g]["type_tyndp"] == "Offshore Wind" || input_data["gen"][g]["type_tyndp"] == "Solar PV" || input_data["gen"][g]["type_tyndp"] == input_data["gen"][g]["type_tyndp"] == "Run-of-River" 
             res_curt += (input_data["gen"][g]["pmax"] - gen["pg"]) * input_data["baseMVA"]
         end
 	end

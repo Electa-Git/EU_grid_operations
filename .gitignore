@@ -5,3 +5,5 @@ data_sources/PECD-MAF2019-wide-PV.feather
 results/
 Manifest.toml
 data_sources/~$GRID_MODEL.xlsx
+tutorial/tutorial_env/
+tutorial/results_tutorial/
