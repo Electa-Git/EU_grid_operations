@@ -7,7 +7,7 @@ using InteractiveUtils
 # ╔═╡ f5dff1da-d308-5bad-b07d-9de08588840e
 begin
 	import Pkg
-	Pkg.activate(joinpath(@__DIR__, "tutorial_env"); io = devnull)
+	#Pkg.activate(joinpath(@__DIR__, "tutorial_env"); io = devnull)
 
 	import PowerModels;        const PM = PowerModels
 	import PowerModelsACDC;    const PMACDC = PowerModelsACDC
